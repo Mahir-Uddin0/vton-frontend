@@ -26,7 +26,7 @@ function ImagePanel({ label, src, alt, className = "" }) {
 export default function ResultsDashboard({
   personImageUrl,
   garmentImageUrl,
-  garmentType,
+  garmentDescription,
   generatedImageUrl,
   onTryAnother = () => {},
 }) {
@@ -72,9 +72,9 @@ export default function ResultsDashboard({
           >
             <ImagePanel label="Garment photo" src={garmentImageUrl} alt="Uploaded garment" />
             <p className="mt-4 text-[10px] font-medium tracking-[0.15em] uppercase text-[#83837C]">
-              Garment type
+              Garment description
             </p>
-            <p className="mt-1 text-sm text-[#0B0B0C]">{garmentType}</p>
+            <p className="mt-1 text-sm text-[#0B0B0C]">{garmentDescription}</p>
           </motion.div>
 
           <motion.figure

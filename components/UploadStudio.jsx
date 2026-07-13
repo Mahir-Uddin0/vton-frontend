@@ -1,431 +1,329 @@
 "use client";
 
-import React, { useCallback, useRef, useState } from "react";
-import {
-  Camera,
-  Upload,
-  X,
-  RotateCcw,
-  Check,
-  ArrowRight,
-  ImageOff,
-  Loader2,
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowRight, Camera, Check, ImageOff, Loader2, RotateCcw, Upload, X } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 
-/**
- * UPLOAD STUDIO
- * -------------
- * Step 01 — Subject:  drag/drop or camera-capture a full body photo.
- * Step 02 — Garment:  drag/drop a garment photo + name the garment type.
- * Generate is disabled until both images and the garment type are set.
- *
- * Swap `onGenerate` for a real handler when wiring the next screen; the
- * controller passes { userImage, garmentImage, garmentType } straight to the
- * API layer.
- */
+function makeImage(file) {
+  return { url: URL.createObjectURL(file), name: file.name, file };
+}
 
-// Small viewfinder-style corner bracket, reused on every dropzone/thumbnail.
 function CornerBrackets({ active }) {
-  const base = "absolute w-5 h-5 border-current transition-colors duration-300";
+  const base = "absolute h-5 w-5 border-current transition-colors duration-300";
   const color = active ? "text-[#1B4DFF]" : "text-[#C9C8C0]";
+
   return (
     <>
-      <span className={`${base} ${color} top-3 left-3 border-t-2 border-l-2`} />
-      <span className={`${base} ${color} top-3 right-3 border-t-2 border-r-2`} />
+      <span className={`${base} ${color} left-3 top-3 border-l-2 border-t-2`} />
+      <span className={`${base} ${color} right-3 top-3 border-r-2 border-t-2`} />
       <span className={`${base} ${color} bottom-3 left-3 border-b-2 border-l-2`} />
       <span className={`${base} ${color} bottom-3 right-3 border-b-2 border-r-2`} />
     </>
   );
 }
 
-function StepLabel({ index, title, done }) {
+function FieldLabel({ index, title, complete }) {
   return (
-    <div className="flex items-center gap-2 mb-4">
-      <span
-        className={`font-serif text-sm tabular-nums ${
-          done ? "text-[#1B4DFF]" : "text-[#83837C]"
-        }`}
-      >
+    <div className="mb-4 flex items-center gap-2">
+      <span className={`font-serif text-sm tabular-nums ${complete ? "text-[#1B4DFF]" : "text-[#83837C]"}`}>
         {index}
       </span>
       <span className="h-px w-6 bg-[#DEDDD6]" />
-      <span className="text-[11px] font-medium tracking-[0.18em] uppercase text-[#0B0B0C]">
-        {title}
-      </span>
-      {done && <Check className="w-3.5 h-3.5 text-[#1B4DFF] ml-0.5" strokeWidth={2.5} />}
+      <span className="text-[11px] font-medium tracking-[0.18em] uppercase">{title}</span>
+      {complete && <Check className="ml-0.5 h-3.5 w-3.5 text-[#1B4DFF]" strokeWidth={2.5} />}
     </div>
   );
 }
 
-/**
- * A single self-contained image dropzone: drag/drop, choose-file, camera
- * capture, preview with retake/remove. Used identically for both the user
- * photo and the garment photo.
- *
- *   value    — { url, name, file } | null
- *   onFile   — (file: File) => void
- *   onRemove — () => void
- */
-function ImageDropzone({ value, onFile, onRemove, hint, previewAlt, removeLabel }) {
-  const [isDragging, setIsDragging] = useState(false);
-  const [imgError, setImgError] = useState(false);
-  const fileInputRef = useRef(null);
-  const cameraInputRef = useRef(null);
+function CameraCaptureDialog({ facingMode, onCapture, onClose }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [error, setError] = useState("");
 
-  const handleFiles = useCallback(
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function startCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError("Camera access is not available in this browser. Use a secure HTTPS connection or localhost.");
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facingMode } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+      } catch (cause) {
+        console.error("Unable to open camera:", cause);
+        setError("We couldn't open your camera. Check your browser permission, then try again.");
+      }
+    }
+
+    startCamera();
+    return () => {
+      cancelled = true;
+      stopCamera();
+    };
+  }, [facingMode, stopCamera]);
+
+  const capturePhoto = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      onCapture(new File([blob], `camera-${Date.now()}.jpg`, { type: "image/jpeg" }));
+      stopCamera();
+      onClose();
+    }, "image/jpeg", 0.92);
+  }, [onCapture, onClose, stopCamera]);
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Camera capture" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-5">
+      <div className="w-full max-w-xl overflow-hidden rounded-sm bg-[#FAFAF7] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#DEDDD6] px-5 py-4">
+          <div>
+            <p className="font-serif text-xl">Take a photo</p>
+            <p className="mt-0.5 text-xs text-[#83837C]">Allow camera access when your browser asks.</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-sm p-2 text-[#83837C] transition-colors hover:bg-[#EDECE6] hover:text-[#0B0B0C]" aria-label="Close camera">
+            <X className="h-5 w-5" strokeWidth={1.75} />
+          </button>
+        </div>
+
+        <div className="relative aspect-[4/3] bg-[#0B0B0C]">
+          {error ? (
+            <div className="flex h-full items-center justify-center px-8 text-center text-sm leading-relaxed text-white/80">{error}</div>
+          ) : (
+            <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3 p-5">
+          <button type="button" onClick={onClose} className="rounded-sm border border-[#0B0B0C] px-4 py-2.5 text-sm font-medium transition-colors hover:border-[#1B4DFF] hover:text-[#1B4DFF]">
+            Cancel
+          </button>
+          <button type="button" disabled={Boolean(error)} onClick={capturePhoto} className="flex items-center gap-2 rounded-sm bg-[#1B4DFF] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#173fd1] disabled:cursor-not-allowed disabled:bg-[#A8A79F]">
+            <Camera className="h-4 w-4" strokeWidth={1.75} />
+            Capture photo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImageDropzone({ value, onFile, onRemove, hint, previewAlt, removeLabel, cameraFacingMode }) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const selectFile = useCallback(
     (files) => {
-      const file = files?.[0];
+      const file = files instanceof File ? files : files?.[0];
       if (!file || !file.type.startsWith("image/")) return;
-      setImgError(false);
+      setImageError(false);
       onFile(file);
     },
     [onFile]
   );
 
-  const onDrop = useCallback(
-    (e) => {
-      e.preventDefault();
-      setIsDragging(false);
-      handleFiles(e.dataTransfer.files);
-    },
-    [handleFiles]
-  );
-
   if (!value) {
     return (
       <div
-        onDragOver={(e) => {
-          e.preventDefault();
+        onDragOver={(event) => {
+          event.preventDefault();
           setIsDragging(true);
         }}
         onDragLeave={() => setIsDragging(false)}
-        onDrop={onDrop}
-        className={`relative aspect-[3/4] max-w-sm rounded-sm border transition-colors duration-200 flex flex-col items-center justify-center gap-4 px-6 text-center ${
-          isDragging
-            ? "border-[#1B4DFF] bg-[#E8EDFF]"
-            : "border-dashed border-[#C9C8C0] bg-white"
+        onDrop={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+          selectFile(event.dataTransfer.files);
+        }}
+        className={`relative flex aspect-[4/5] w-full flex-col items-center justify-center gap-4 rounded-sm border px-6 text-center transition-colors ${
+          isDragging ? "border-[#1B4DFF] bg-[#E8EDFF]" : "border-dashed border-[#C9C8C0] bg-white"
         }`}
       >
         <CornerBrackets active={isDragging} />
-
-        <div
-          className={`w-11 h-11 rounded-full flex items-center justify-center border transition-colors ${
-            isDragging
-              ? "border-[#1B4DFF] text-[#1B4DFF]"
-              : "border-[#C9C8C0] text-[#83837C]"
-          }`}
-        >
-          <Upload className="w-4 h-4" strokeWidth={1.75} />
-        </div>
-
+        <span className={`flex h-11 w-11 items-center justify-center rounded-full border ${isDragging ? "border-[#1B4DFF] text-[#1B4DFF]" : "border-[#C9C8C0] text-[#83837C]"}`}>
+          <Upload className="h-4 w-4" strokeWidth={1.75} />
+        </span>
         <div>
-          <p className="text-sm font-medium">Drag a photo here, or choose below</p>
-          <p className="text-xs text-[#83837C] mt-1">{hint}</p>
+          <p className="text-sm font-medium">Drop an image here</p>
+          <p className="mt-1 text-xs leading-relaxed text-[#83837C]">{hint}</p>
         </div>
-
-        <div className="flex items-center gap-2 mt-1">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="text-xs font-medium tracking-wide px-4 py-2 rounded-sm bg-[#0B0B0C] text-white hover:bg-[#1B4DFF] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4DFF] focus-visible:ring-offset-2"
+            className="rounded-sm bg-[#0B0B0C] px-4 py-2 text-xs font-medium tracking-wide text-white transition-colors hover:bg-[#1B4DFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4DFF] focus-visible:ring-offset-2"
           >
             Choose file
           </button>
           <button
             type="button"
-            onClick={() => cameraInputRef.current?.click()}
-            className="text-xs font-medium tracking-wide px-4 py-2 rounded-sm border border-[#0B0B0C] hover:border-[#1B4DFF] hover:text-[#1B4DFF] transition-colors flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4DFF] focus-visible:ring-offset-2"
+            onClick={() => setIsCameraOpen(true)}
+            className="flex items-center gap-1.5 rounded-sm border border-[#0B0B0C] px-4 py-2 text-xs font-medium tracking-wide transition-colors hover:border-[#1B4DFF] hover:text-[#1B4DFF] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4DFF] focus-visible:ring-offset-2"
           >
-            <Camera className="w-3.5 h-3.5" strokeWidth={1.75} />
+            <Camera className="h-3.5 w-3.5" strokeWidth={1.75} />
             Camera
           </button>
         </div>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
-        />
+        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => selectFile(event.target.files)} />
+        {isCameraOpen && <CameraCaptureDialog facingMode={cameraFacingMode} onCapture={selectFile} onClose={() => setIsCameraOpen(false)} />}
       </div>
     );
   }
 
   return (
-    <div className="relative aspect-[3/4] max-w-sm rounded-sm overflow-hidden bg-[#EDECE6] fade-up">
+    <div className="relative aspect-[4/5] w-full overflow-hidden rounded-sm bg-[#EDECE6]">
       <CornerBrackets active />
-      {!imgError ? (
-        <img
-          src={value.url}
-          alt={previewAlt}
-          onError={() => setImgError(true)}
-          className="w-full h-full object-cover"
-        />
+      {!imageError ? (
+        <img src={value.url} alt={previewAlt} onError={() => setImageError(true)} className="h-full w-full object-cover" />
       ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-[#83837C]">
-          <ImageOff className="w-6 h-6" strokeWidth={1.5} />
+        <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-[#83837C]">
+          <ImageOff className="h-6 w-6" strokeWidth={1.5} />
           <span className="text-xs">Couldn&apos;t preview this file</span>
         </div>
       )}
-
-      {/* Ruler ticks along the right edge — measurement motif */}
-      <div className="absolute top-3 bottom-3 right-3 w-3 flex flex-col justify-between pointer-events-none">
-        {Array.from({ length: 9 }).map((_, i) => (
-          <span
-            key={i}
-            className={`bg-white/70 ${i % 2 === 0 ? "w-3 h-px" : "w-1.5 h-px"}`}
-          />
-        ))}
-      </div>
-
-      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent p-3 flex items-center justify-between">
-        <span className="text-[11px] text-white/90 truncate max-w-[60%]">
-          {value.name}
-        </span>
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-gradient-to-t from-black/60 to-transparent p-3">
+        <span className="max-w-[60%] truncate text-[11px] text-white/90">{value.name}</span>
         <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="p-1.5 rounded-sm bg-white/15 hover:bg-white/25 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            aria-label="Replace photo"
-          >
-            <RotateCcw className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <button type="button" onClick={() => fileInputRef.current?.click()} className="rounded-sm bg-white/15 p-1.5 text-white transition-colors hover:bg-white/25" aria-label="Replace photo">
+            <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="p-1.5 rounded-sm bg-white/15 hover:bg-white/25 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
-            aria-label={removeLabel}
-          >
-            <X className="w-3.5 h-3.5" strokeWidth={1.75} />
+          <button type="button" onClick={onRemove} className="rounded-sm bg-white/15 p-1.5 text-white transition-colors hover:bg-white/25" aria-label={removeLabel}>
+            <X className="h-3.5 w-3.5" strokeWidth={1.75} />
           </button>
         </div>
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) => handleFiles(e.target.files)}
-      />
+      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => selectFile(event.target.files)} />
     </div>
   );
 }
 
+/** Embedded upload form used directly on the landing page. */
 export default function UploadStudio({
   onGenerate = (selection) => {
     void selection;
   },
   error = "",
 }) {
-  const [userImage, setUserImage] = useState(null); // { url, name, file }
-  const [garmentImage, setGarmentImage] = useState(null); // { url, name, file }
-  const [garmentType, setGarmentType] = useState("");
+  const [userImage, setUserImage] = useState(null);
+  const [garmentImage, setGarmentImage] = useState(null);
+  const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Keep the raw File — the API layer needs it to POST to the backend.
-  const makeImage = (file) => ({
-    url: URL.createObjectURL(file),
-    name: file.name,
-    file,
-  });
-
-  const setUser = useCallback((file) => setUserImage(makeImage(file)), []);
-  const setGarment = useCallback((file) => setGarmentImage(makeImage(file)), []);
-
-  const removeUser = useCallback(() => {
-    setUserImage((prev) => {
-      if (prev?.url) URL.revokeObjectURL(prev.url);
-      return null;
+  const setUser = useCallback((file) => {
+    setUserImage((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return makeImage(file);
     });
   }, []);
-  const removeGarment = useCallback(() => {
-    setGarmentImage((prev) => {
-      if (prev?.url) URL.revokeObjectURL(prev.url);
-      return null;
+  const setGarment = useCallback((file) => {
+    setGarmentImage((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return makeImage(file);
     });
   }, []);
+  const removeImage = (setter) => () => {
+    setter((previous) => {
+      if (previous?.url) URL.revokeObjectURL(previous.url);
+      return null;
+    });
+  };
 
-  const canGenerate =
-    Boolean(userImage) && Boolean(garmentImage) && garmentType.trim().length > 0;
+  const canGenerate = Boolean(userImage) && Boolean(garmentImage) && description.trim().length > 0;
 
-  // Awaiting onGenerate keeps this screen in place while the request runs.
   const handleSubmit = useCallback(async () => {
     if (!canGenerate || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await onGenerate({
-        userImage,
-        garmentImage,
-        garmentType: garmentType.trim(),
-      });
-    } catch (err) {
-      console.error("Try-on generation failed:", err);
+      await onGenerate({ userImage, garmentImage, description: description.trim() });
+    } catch (cause) {
+      console.error("Try-on generation failed:", cause);
       setIsSubmitting(false);
     }
-  }, [canGenerate, isSubmitting, onGenerate, userImage, garmentImage, garmentType]);
+  }, [canGenerate, description, garmentImage, isSubmitting, onGenerate, userImage]);
 
   return (
-    <div className="min-h-screen bg-[#FAFAF7] text-[#0B0B0C]">
-      <style>{`
-        @keyframes fade-up {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .fade-up { animation: fade-up 0.35s ease-out both; }
-        @media (prefers-reduced-motion: reduce) {
-          .fade-up { animation: none; }
-        }
-      `}</style>
+    <section id="try-on" className="border-y border-[#DEDDD6] bg-white">
+      <div className="mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
+        <div className="mb-9 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-[11px] font-medium tracking-[0.18em] uppercase text-[#1B4DFF]">Create a try-on</p>
+            <h2 className="mt-2 font-serif text-3xl leading-tight sm:text-4xl">Add your images</h2>
+          </div>
+          </div>
 
-      {/* Header */}
-      <header className="border-b border-[#DEDDD6] px-5 sm:px-8 py-5 flex items-center justify-between">
-        <span className="font-serif text-lg tracking-tight">Fit Check</span>
-        <span className="text-[11px] tracking-[0.18em] uppercase text-[#83837C]">
-          Upload Studio
-        </span>
-      </header>
+        {error && <p role="alert" className="mb-6 rounded-sm border border-[#F4C7C3] bg-[#FEF3F2] px-4 py-3 text-sm text-[#B42318]">{error}</p>}
 
-      <main className="max-w-5xl mx-auto px-5 sm:px-8 py-10 sm:py-14 pb-32 lg:pb-14">
-        <div className="mb-10 sm:mb-14">
-          <h1 className="font-serif text-3xl sm:text-4xl leading-tight">
-            Set your subject, upload your garment.
-          </h1>
-          <p className="text-[#83837C] text-sm mt-2 max-w-md">
-            One full-body photo, one garment photo, and the garment type.
-            We&apos;ll map the rest.
-          </p>
-          {error && (
-            <p role="alert" className="text-sm text-[#B42318] mt-4 max-w-md">
-              {error}
-            </p>
-          )}
-        </div>
-
-        <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 lg:gap-14">
-          {/* STEP 01 — SUBJECT */}
+        <div className="grid grid-cols-2 gap-4 sm:gap-10">
           <section>
-            <StepLabel index="01" title="Subject" done={Boolean(userImage)} />
-            <ImageDropzone
-              value={userImage}
-              onFile={setUser}
-              onRemove={removeUser}
-              hint="Full body, plain background, arms visible · JPG or PNG"
-              previewAlt="Uploaded subject"
-              removeLabel="Remove subject photo"
-            />
+            <FieldLabel index="01" title="Person image" complete={Boolean(userImage)} />
+            <ImageDropzone value={userImage} onFile={setUser} onRemove={removeImage(setUserImage)} hint="Full body, plain background, arms visible · JPG or PNG" previewAlt="Uploaded person" removeLabel="Remove person image" cameraFacingMode="user" />
           </section>
 
-          {/* STEP 02 — GARMENT */}
           <section>
-            <StepLabel
-              index="02"
-              title="Garment"
-              done={Boolean(garmentImage) && garmentType.trim().length > 0}
-            />
-
-            <ImageDropzone
-              value={garmentImage}
-              onFile={setGarment}
-              onRemove={removeGarment}
-              hint="The item alone, flat or on a hanger · JPG or PNG"
-              previewAlt="Uploaded garment"
-              removeLabel="Remove garment photo"
-            />
-
-            {/* Garment type — sent as the backend's description field. */}
-            <div className="max-w-sm mt-5">
-              <label
-                htmlFor="garment-type"
-                className="block text-[11px] font-medium tracking-[0.18em] uppercase text-[#0B0B0C] mb-2"
-              >
-                Garment Type
-              </label>
-              <Input
-                id="garment-type"
-                value={garmentType}
-                onChange={(e) => setGarmentType(e.target.value)}
-                placeholder="e.g. T-shirt, Jeans, Dress"
-                autoComplete="off"
-                className="border-[#DEDDD6] bg-white text-[#0B0B0C] placeholder:text-[#A8A79F] rounded-sm h-10 focus-visible:border-[#1B4DFF] focus-visible:ring-[#1B4DFF]/30"
-              />
+            <FieldLabel index="02" title="Garment" complete={Boolean(garmentImage) && description.trim().length > 0} />
+            <ImageDropzone value={garmentImage} onFile={setGarment} onRemove={removeImage(setGarmentImage)} hint="Item alone, flat or on a hanger · JPG or PNG" previewAlt="Uploaded garment" removeLabel="Remove garment image" cameraFacingMode="environment" />
+            <div className="mt-5">
+              <label htmlFor="garment-description" className="mb-2 block text-[11px] font-medium tracking-[0.18em] uppercase">Garment description</label>
+              <Input id="garment-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="e.g. Blue denim jacket with silver buttons" autoComplete="off" className="h-11 rounded-sm border-[#DEDDD6] bg-white placeholder:text-[#A8A79F] focus-visible:border-[#1B4DFF] focus-visible:ring-[#1B4DFF]/30" />
             </div>
           </section>
         </div>
-      </main>
 
-      {/* Generate bar — sticky on mobile, inline on desktop */}
-      <div className="fixed lg:static bottom-0 inset-x-0 border-t border-[#DEDDD6] bg-[#FAFAF7]/95 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none lg:border-t-0">
-        <div className="max-w-5xl mx-auto px-5 sm:px-8 py-4 lg:pt-0 lg:pb-14 flex items-center justify-between gap-4">
-          <p className="text-xs text-[#83837C] hidden sm:block">
-            {isSubmitting
-              ? "Sending to the fit engine…"
-              : canGenerate
-                ? "Ready — this takes about 15 seconds."
-                : "Add both photos and a garment type to continue."}
-          </p>
-          <button
-            type="button"
-            disabled={!canGenerate || isSubmitting}
-            onClick={handleSubmit}
-            className={`w-full sm:w-auto ml-auto flex items-center justify-center gap-2 text-sm font-medium tracking-wide px-6 py-3.5 sm:py-3 rounded-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4DFF] focus-visible:ring-offset-2 ${
-              canGenerate && !isSubmitting
-                ? "bg-[#1B4DFF] text-white hover:bg-[#173fd1]"
-                : "bg-[#E7E6E0] text-[#A8A79F] cursor-not-allowed"
-            }`}
-          >
-            {isSubmitting ? (
-              <>
-                Generating
-                <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
-              </>
-            ) : (
-              <>
-                Generate Try-On
-                <ArrowRight className="w-4 h-4" strokeWidth={2} />
-              </>
-            )}
+        <div className="mt-10 flex flex-col items-center gap-4 border-t border-[#DEDDD6] pt-5 text-center">
+          <p className="text-xs text-[#83837C]">{canGenerate ? "Ready to create your virtual try-on." : "Add both images and a garment description to continue."}</p>
+          <button type="button" disabled={!canGenerate || isSubmitting} onClick={handleSubmit} className={`flex w-full items-center justify-center gap-2 rounded-sm px-6 py-3 text-sm font-medium tracking-wide transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4DFF] focus-visible:ring-offset-2 sm:w-auto ${canGenerate && !isSubmitting ? "bg-[#1B4DFF] text-white hover:bg-[#173fd1]" : "cursor-not-allowed bg-[#E7E6E0] text-[#A8A79F]"}`}>
+            Generate Try-On
+            <ArrowRight className="h-4 w-4" strokeWidth={2} />
           </button>
         </div>
       </div>
 
       {isSubmitting && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#FAFAF7]/75 px-5 backdrop-blur-sm"
-        >
+        <div role="status" aria-live="polite" className="fixed inset-0 z-50 flex items-center justify-center bg-[#FAFAF7]/75 px-5 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-sm border border-[#DEDDD6] bg-white p-7 shadow-xl shadow-black/5">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8EDFF] text-[#1B4DFF]">
-                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} />
-              </span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8EDFF] text-[#1B4DFF]"><Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} /></span>
               <div>
                 <p className="font-serif text-xl">Creating your virtual try-on</p>
-                <p className="mt-0.5 text-sm text-[#83837C]">
-                  Your photos and garment type are being processed.
-                </p>
+                <p className="mt-0.5 text-sm text-[#83837C]">Your images are being prepared by the try-on model.</p>
               </div>
             </div>
             <div className="mt-6 grid grid-cols-3 gap-2 text-center text-[10px] font-medium tracking-[0.12em] uppercase text-[#83837C]">
-              <span className="rounded-sm bg-[#F0EFE9] px-2 py-2">Photos ready</span>
+              <span className="rounded-sm bg-[#F0EFE9] px-2 py-2">Images ready</span>
               <span className="rounded-sm bg-[#E8EDFF] px-2 py-2 text-[#1B4DFF]">Generating</span>
               <span className="rounded-sm bg-[#F0EFE9] px-2 py-2">Result next</span>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

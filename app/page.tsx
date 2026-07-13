@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 
 import LandingPage from "@/components/LandingPage";
-import UploadStudio from "@/components/UploadStudio";
 import ResultsDashboard from "@/components/ResultsDashboard";
 import { generateTryOn, type TryOnResult } from "@/lib/api";
 
@@ -12,9 +11,9 @@ import { generateTryOn, type TryOnResult } from "@/lib/api";
  * state machine that moves between them and owns the async try-on call,
  * so the request lives in exactly one place and the screens stay dumb.
  *
- * Flow: landing → upload (including generation) → results (→ back to upload)
+ * Flow: landing (including upload and generation) → results → landing
  */
-type Stage = "landing" | "upload" | "results";
+type Stage = "landing" | "results";
 
 interface UploadedImage {
   url: string; // object URL for preview
@@ -25,7 +24,7 @@ interface UploadedImage {
 interface Selection {
   userImage: UploadedImage;
   garmentImage: UploadedImage;
-  garmentType: string;
+  description: string;
 }
 
 export default function Home() {
@@ -45,7 +44,7 @@ export default function Home() {
       const tryOn = await generateTryOn({
         userImage: next.userImage.file,
         garmentImage: next.garmentImage.file,
-        description: next.garmentType,
+        description: next.description,
       });
       setResult(tryOn);
       setStage("results");
@@ -59,19 +58,16 @@ export default function Home() {
   const handleTryAnother = useCallback(() => {
     setResult(null);
     setError(null);
-    setStage("upload");
+    setStage("landing");
   }, []);
 
   switch (stage) {
-    case "upload":
-      return <UploadStudio onGenerate={handleGenerate} error={error ?? undefined} />;
-
     case "results":
       return (
         <ResultsDashboard
           personImageUrl={selection?.userImage.url}
           garmentImageUrl={selection?.garmentImage.url}
-          garmentType={selection?.garmentType}
+          garmentDescription={selection?.description}
           generatedImageUrl={result?.imageUrl}
           onTryAnother={handleTryAnother}
         />
@@ -79,6 +75,6 @@ export default function Home() {
 
     case "landing":
     default:
-      return <LandingPage onCheckFit={() => setStage("upload")} />;
+      return <LandingPage onGenerate={handleGenerate} error={error ?? undefined} />;
   }
 }
