@@ -1,4 +1,4 @@
-# Fit Check — AI Virtual Try-On Frontend
+# AI Virtual Try-On Frontend
 
 Fit Check is a polished, responsive web experience for AI-powered virtual clothing try-on. A user provides a photo of themselves, a garment image, and a short garment description; the application securely forwards those inputs to a FastAPI try-on service and presents the generated image alongside the original inputs.
 
