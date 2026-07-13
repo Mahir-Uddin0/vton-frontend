@@ -4,18 +4,17 @@ import { useCallback, useState } from "react";
 
 import LandingPage from "@/components/LandingPage";
 import UploadStudio from "@/components/UploadStudio";
-import ProcessingState from "@/components/ProcessingState";
 import ResultsDashboard from "@/components/ResultsDashboard";
 import { generateTryOn, type TryOnResult } from "@/lib/api";
 
 /**
- * The four screens are plain presentational components. This page is the
+ * The screens are plain presentational components. This page is the
  * state machine that moves between them and owns the async try-on call,
  * so the request lives in exactly one place and the screens stay dumb.
  *
- * Flow: landing → upload → processing → results (→ back to upload)
+ * Flow: landing → upload (including generation) → results (→ back to upload)
  */
-type Stage = "landing" | "upload" | "processing" | "results";
+type Stage = "landing" | "upload" | "results";
 
 interface UploadedImage {
   url: string; // object URL for preview
@@ -26,7 +25,7 @@ interface UploadedImage {
 interface Selection {
   userImage: UploadedImage;
   garmentImage: UploadedImage;
-  description: string;
+  garmentType: string;
 }
 
 export default function Home() {
@@ -35,24 +34,26 @@ export default function Home() {
   const [result, setResult] = useState<TryOnResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Upload Studio hands us the two photos + garment type. We just advance the
-  // machine; ProcessingState performs the actual request via the thunk below.
-  const handleGenerate = useCallback((next: Selection) => {
+  // The request is awaited here so the Upload Studio remains mounted while its
+  // loading state is visible. The backend calls this value "description".
+  const handleGenerate = useCallback(async (next: Selection) => {
     setSelection(next);
     setResult(null);
     setError(null);
-    setStage("processing");
-  }, []);
 
-  const handleComplete = useCallback((tryOn: TryOnResult) => {
-    setResult(tryOn);
-    setStage("results");
-  }, []);
-
-  const handleProcessingError = useCallback((err: unknown) => {
-    console.error("Try-on generation failed:", err);
-    setError(err instanceof Error ? err.message : "Unable to generate your try-on image.");
-    setStage("upload");
+    try {
+      const tryOn = await generateTryOn({
+        userImage: next.userImage.file,
+        garmentImage: next.garmentImage.file,
+        description: next.garmentType,
+      });
+      setResult(tryOn);
+      setStage("results");
+    } catch (err) {
+      console.error("Try-on generation failed:", err);
+      setError(err instanceof Error ? err.message : "Unable to generate your try-on image.");
+      throw err;
+    }
   }, []);
 
   const handleTryAnother = useCallback(() => {
@@ -65,25 +66,12 @@ export default function Home() {
     case "upload":
       return <UploadStudio onGenerate={handleGenerate} error={error ?? undefined} />;
 
-    case "processing":
-      return (
-        <ProcessingState
-          photoUrl={selection?.userImage.url}
-          request={() =>
-            generateTryOn({
-              userImage: selection!.userImage.file,
-              garmentImage: selection!.garmentImage.file,
-              description: selection!.description,
-            })
-          }
-          onComplete={handleComplete}
-          onError={handleProcessingError}
-        />
-      );
-
     case "results":
       return (
         <ResultsDashboard
+          personImageUrl={selection?.userImage.url}
+          garmentImageUrl={selection?.garmentImage.url}
+          garmentType={selection?.garmentType}
           generatedImageUrl={result?.imageUrl}
           onTryAnother={handleTryAnother}
         />

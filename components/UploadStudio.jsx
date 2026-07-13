@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
  * Generate is disabled until both images and the garment type are set.
  *
  * Swap `onGenerate` for a real handler when wiring the next screen; the
- * controller passes { userImage, garmentImage, description } straight to the
+ * controller passes { userImage, garmentImage, garmentType } straight to the
  * API layer.
  */
 
@@ -223,10 +223,15 @@ function ImageDropzone({ value, onFile, onRemove, hint, previewAlt, removeLabel 
   );
 }
 
-export default function UploadStudio({ onGenerate = (_selection) => {}, error = "" }) {
+export default function UploadStudio({
+  onGenerate = (selection) => {
+    void selection;
+  },
+  error = "",
+}) {
   const [userImage, setUserImage] = useState(null); // { url, name, file }
   const [garmentImage, setGarmentImage] = useState(null); // { url, name, file }
-  const [description, setDescription] = useState("");
+  const [garmentType, setGarmentType] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Keep the raw File — the API layer needs it to POST to the backend.
@@ -253,12 +258,9 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
   }, []);
 
   const canGenerate =
-    Boolean(userImage) && Boolean(garmentImage) && description.trim().length > 0;
+    Boolean(userImage) && Boolean(garmentImage) && garmentType.trim().length > 0;
 
-  // onGenerate may be async (the controller kicks off the fit-check request).
-  // We await it so the button can show a real "starting" state and we never
-  // fire twice. The controller unmounts this screen on success, so we only
-  // reset the flag if it rejects.
+  // Awaiting onGenerate keeps this screen in place while the request runs.
   const handleSubmit = useCallback(async () => {
     if (!canGenerate || isSubmitting) return;
     setIsSubmitting(true);
@@ -266,13 +268,13 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
       await onGenerate({
         userImage,
         garmentImage,
-        description: description.trim(),
+        garmentType: garmentType.trim(),
       });
     } catch (err) {
-      console.error("Failed to start fit check:", err);
+      console.error("Try-on generation failed:", err);
       setIsSubmitting(false);
     }
-  }, [canGenerate, isSubmitting, onGenerate, userImage, garmentImage, description]);
+  }, [canGenerate, isSubmitting, onGenerate, userImage, garmentImage, garmentType]);
 
   return (
     <div className="min-h-screen bg-[#FAFAF7] text-[#0B0B0C]">
@@ -301,7 +303,7 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
             Set your subject, upload your garment.
           </h1>
           <p className="text-[#83837C] text-sm mt-2 max-w-md">
-            One full-body photo, one garment photo, and a garment description.
+            One full-body photo, one garment photo, and the garment type.
             We&apos;ll map the rest.
           </p>
           {error && (
@@ -330,7 +332,7 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
             <StepLabel
               index="02"
               title="Garment"
-              done={Boolean(garmentImage) && description.trim().length > 0}
+              done={Boolean(garmentImage) && garmentType.trim().length > 0}
             />
 
             <ImageDropzone
@@ -342,19 +344,19 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
               removeLabel="Remove garment photo"
             />
 
-            {/* Garment description — sent directly to the try-on API. */}
+            {/* Garment type — sent as the backend's description field. */}
             <div className="max-w-sm mt-5">
               <label
-                htmlFor="garment-description"
+                htmlFor="garment-type"
                 className="block text-[11px] font-medium tracking-[0.18em] uppercase text-[#0B0B0C] mb-2"
               >
-                Garment Description
+                Garment Type
               </label>
               <Input
-                id="garment-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="e.g. Blue denim jacket with silver buttons"
+                id="garment-type"
+                value={garmentType}
+                onChange={(e) => setGarmentType(e.target.value)}
+                placeholder="e.g. T-shirt, Jeans, Dress"
                 autoComplete="off"
                 className="border-[#DEDDD6] bg-white text-[#0B0B0C] placeholder:text-[#A8A79F] rounded-sm h-10 focus-visible:border-[#1B4DFF] focus-visible:ring-[#1B4DFF]/30"
               />
@@ -371,7 +373,7 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
               ? "Sending to the fit engine…"
               : canGenerate
                 ? "Ready — this takes about 15 seconds."
-                : "Add both photos and a garment description to continue."}
+                : "Add both photos and a garment type to continue."}
           </p>
           <button
             type="button"
@@ -385,18 +387,45 @@ export default function UploadStudio({ onGenerate = (_selection) => {}, error = 
           >
             {isSubmitting ? (
               <>
-                Starting
+                Generating
                 <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
               </>
             ) : (
               <>
-                Generate Fit
+                Generate Try-On
                 <ArrowRight className="w-4 h-4" strokeWidth={2} />
               </>
             )}
           </button>
         </div>
       </div>
+
+      {isSubmitting && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#FAFAF7]/75 px-5 backdrop-blur-sm"
+        >
+          <div className="w-full max-w-md rounded-sm border border-[#DEDDD6] bg-white p-7 shadow-xl shadow-black/5">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8EDFF] text-[#1B4DFF]">
+                <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} />
+              </span>
+              <div>
+                <p className="font-serif text-xl">Creating your virtual try-on</p>
+                <p className="mt-0.5 text-sm text-[#83837C]">
+                  Your photos and garment type are being processed.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-3 gap-2 text-center text-[10px] font-medium tracking-[0.12em] uppercase text-[#83837C]">
+              <span className="rounded-sm bg-[#F0EFE9] px-2 py-2">Photos ready</span>
+              <span className="rounded-sm bg-[#E8EDFF] px-2 py-2 text-[#1B4DFF]">Generating</span>
+              <span className="rounded-sm bg-[#F0EFE9] px-2 py-2">Result next</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
