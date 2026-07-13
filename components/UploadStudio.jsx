@@ -292,7 +292,7 @@ export default function UploadStudio({
             <ImageDropzone value={garmentImage} onFile={setGarment} onRemove={removeImage(setGarmentImage)} hint="Item alone, flat or on a hanger · JPG or PNG" previewAlt="Uploaded garment" removeLabel="Remove garment image" cameraFacingMode="environment" />
             <div className="mt-5">
               <label htmlFor="garment-description" className="mb-2 block text-[11px] font-medium tracking-[0.18em] uppercase">Garment description</label>
-              <Input id="garment-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="e.g. Blue denim jacket with silver buttons" autoComplete="off" className="h-11 rounded-sm border-[#DEDDD6] bg-white placeholder:text-[#A8A79F] focus-visible:border-[#1B4DFF] focus-visible:ring-[#1B4DFF]/30" />
+              <Input id="garment-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="e.g. Full Sleeve Shirt" autoComplete="off" className="h-11 rounded-sm border-[#DEDDD6] bg-white placeholder:text-[#A8A79F] focus-visible:border-[#1B4DFF] focus-visible:ring-[#1B4DFF]/30" />
             </div>
           </section>
         </div>
@@ -313,7 +313,7 @@ export default function UploadStudio({
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E8EDFF] text-[#1B4DFF]"><Loader2 className="h-5 w-5 animate-spin" strokeWidth={2} /></span>
               <div>
                 <p className="font-serif text-xl">Creating your virtual try-on</p>
-                <p className="mt-0.5 text-sm text-[#83837C]">Your images are being prepared by the try-on model.</p>
+                <p className="mt-0.5 text-sm text-[#83837C]">The try-on is being generated on Hugging Face Free ZeroGPU because of which this might take 30-40 seconds.</p>
               </div>
             </div>
             <div className="mt-6 grid grid-cols-3 gap-2 text-center text-[10px] font-medium tracking-[0.12em] uppercase text-[#83837C]">
