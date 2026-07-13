@@ -22,7 +22,7 @@ import { Input } from "@/components/ui/input";
  * Generate is disabled until both images and the garment type are set.
  *
  * Swap `onGenerate` for a real handler when wiring the next screen; the
- * controller passes { userImage, garmentImage, garmentType } straight to the
+ * controller passes { userImage, garmentImage, description } straight to the
  * API layer.
  */
 
@@ -223,10 +223,10 @@ function ImageDropzone({ value, onFile, onRemove, hint, previewAlt, removeLabel 
   );
 }
 
-export default function UploadStudio({ onGenerate = (_selection) => {} }) {
+export default function UploadStudio({ onGenerate = (_selection) => {}, error = "" }) {
   const [userImage, setUserImage] = useState(null); // { url, name, file }
   const [garmentImage, setGarmentImage] = useState(null); // { url, name, file }
-  const [garmentType, setGarmentType] = useState("");
+  const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Keep the raw File — the API layer needs it to POST to the backend.
@@ -253,7 +253,7 @@ export default function UploadStudio({ onGenerate = (_selection) => {} }) {
   }, []);
 
   const canGenerate =
-    Boolean(userImage) && Boolean(garmentImage) && garmentType.trim().length > 0;
+    Boolean(userImage) && Boolean(garmentImage) && description.trim().length > 0;
 
   // onGenerate may be async (the controller kicks off the fit-check request).
   // We await it so the button can show a real "starting" state and we never
@@ -266,13 +266,13 @@ export default function UploadStudio({ onGenerate = (_selection) => {} }) {
       await onGenerate({
         userImage,
         garmentImage,
-        garmentType: garmentType.trim(),
+        description: description.trim(),
       });
     } catch (err) {
       console.error("Failed to start fit check:", err);
       setIsSubmitting(false);
     }
-  }, [canGenerate, isSubmitting, onGenerate, userImage, garmentImage, garmentType]);
+  }, [canGenerate, isSubmitting, onGenerate, userImage, garmentImage, description]);
 
   return (
     <div className="min-h-screen bg-[#FAFAF7] text-[#0B0B0C]">
@@ -301,9 +301,14 @@ export default function UploadStudio({ onGenerate = (_selection) => {} }) {
             Set your subject, upload your garment.
           </h1>
           <p className="text-[#83837C] text-sm mt-2 max-w-md">
-            One full-body photo, one garment photo, and what it is. We&apos;ll map
-            the rest.
+            One full-body photo, one garment photo, and a garment description.
+            We&apos;ll map the rest.
           </p>
+          {error && (
+            <p role="alert" className="text-sm text-[#B42318] mt-4 max-w-md">
+              {error}
+            </p>
+          )}
         </div>
 
         <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 lg:gap-14">
@@ -325,7 +330,7 @@ export default function UploadStudio({ onGenerate = (_selection) => {} }) {
             <StepLabel
               index="02"
               title="Garment"
-              done={Boolean(garmentImage) && garmentType.trim().length > 0}
+              done={Boolean(garmentImage) && description.trim().length > 0}
             />
 
             <ImageDropzone
@@ -337,19 +342,19 @@ export default function UploadStudio({ onGenerate = (_selection) => {} }) {
               removeLabel="Remove garment photo"
             />
 
-            {/* Garment type — free text */}
+            {/* Garment description — sent directly to the try-on API. */}
             <div className="max-w-sm mt-5">
               <label
-                htmlFor="garment-type"
+                htmlFor="garment-description"
                 className="block text-[11px] font-medium tracking-[0.18em] uppercase text-[#0B0B0C] mb-2"
               >
-                Garment Type
+                Garment Description
               </label>
               <Input
-                id="garment-type"
-                value={garmentType}
-                onChange={(e) => setGarmentType(e.target.value)}
-                placeholder="e.g. T-shirt, Jeans, Dress"
+                id="garment-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Blue denim jacket with silver buttons"
                 autoComplete="off"
                 className="border-[#DEDDD6] bg-white text-[#0B0B0C] placeholder:text-[#A8A79F] rounded-sm h-10 focus-visible:border-[#1B4DFF] focus-visible:ring-[#1B4DFF]/30"
               />
@@ -366,7 +371,7 @@ export default function UploadStudio({ onGenerate = (_selection) => {} }) {
               ? "Sending to the fit engine…"
               : canGenerate
                 ? "Ready — this takes about 15 seconds."
-                : "Add both photos and a garment type to continue."}
+                : "Add both photos and a garment description to continue."}
           </p>
           <button
             type="button"

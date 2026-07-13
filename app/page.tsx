@@ -6,11 +6,11 @@ import LandingPage from "@/components/LandingPage";
 import UploadStudio from "@/components/UploadStudio";
 import ProcessingState from "@/components/ProcessingState";
 import ResultsDashboard from "@/components/ResultsDashboard";
-import { checkFit, type FitResult } from "@/lib/api";
+import { generateTryOn, type TryOnResult } from "@/lib/api";
 
 /**
  * The four screens are plain presentational components. This page is the
- * state machine that moves between them and owns the async fit-check call,
+ * state machine that moves between them and owns the async try-on call,
  * so the request lives in exactly one place and the screens stay dumb.
  *
  * Flow: landing → upload → processing → results (→ back to upload)
@@ -26,56 +26,55 @@ interface UploadedImage {
 interface Selection {
   userImage: UploadedImage;
   garmentImage: UploadedImage;
-  garmentType: string;
+  description: string;
 }
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("landing");
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [result, setResult] = useState<FitResult | null>(null);
+  const [result, setResult] = useState<TryOnResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Upload Studio hands us the two photos + garment type. We just advance the
   // machine; ProcessingState performs the actual request via the thunk below.
   const handleGenerate = useCallback((next: Selection) => {
     setSelection(next);
     setResult(null);
+    setError(null);
     setStage("processing");
   }, []);
 
-  const handleComplete = useCallback((fit: FitResult) => {
-    setResult(fit);
+  const handleComplete = useCallback((tryOn: TryOnResult) => {
+    setResult(tryOn);
     setStage("results");
   }, []);
 
   const handleProcessingError = useCallback((err: unknown) => {
-    console.error("Fit check failed:", err);
-    // Simple recovery for the demo: return to the studio so the user retries.
-    // A real app would surface a toast / inline error here.
+    console.error("Try-on generation failed:", err);
+    setError(err instanceof Error ? err.message : "Unable to generate your try-on image.");
     setStage("upload");
   }, []);
 
   const handleTryAnother = useCallback(() => {
     setResult(null);
+    setError(null);
     setStage("upload");
   }, []);
 
   switch (stage) {
     case "upload":
-      return <UploadStudio onGenerate={handleGenerate} />;
+      return <UploadStudio onGenerate={handleGenerate} error={error ?? undefined} />;
 
     case "processing":
       return (
         <ProcessingState
           photoUrl={selection?.userImage.url}
           request={() =>
-            checkFit(
-              {
-                userImage: selection!.userImage.file,
-                garmentImage: selection!.garmentImage.file,
-                garmentType: selection!.garmentType,
-              },
-              selection!.userImage.url
-            )
+            generateTryOn({
+              userImage: selection!.userImage.file,
+              garmentImage: selection!.garmentImage.file,
+              description: selection!.description,
+            })
           }
           onComplete={handleComplete}
           onError={handleProcessingError}
@@ -85,8 +84,7 @@ export default function Home() {
     case "results":
       return (
         <ResultsDashboard
-          originalPhotoUrl={selection?.userImage.url}
-          result={result ?? undefined}
+          generatedImageUrl={result?.imageUrl}
           onTryAnother={handleTryAnother}
         />
       );

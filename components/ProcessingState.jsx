@@ -13,7 +13,7 @@ import { Ruler, Shirt, Percent } from "lucide-react";
  * cycling caption report progress.
  *
  * The stage animation is cosmetic, but completion is gated on the REAL
- * async request passed via `request` (a thunk returning Promise<FitResult>).
+ * async request passed via `request` (a thunk returning the generated image).
  * The screen advances through the stages, then holds on the final stage
  * until the request resolves — so swapping the mock for a slower real
  * backend just makes it wait longer, no code change here.
