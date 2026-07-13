@@ -109,7 +109,6 @@ lib/
 
 ## Future enhancements
 
-- Move the backend URL to an environment variable for deployment-specific configuration.
 - Add image size/type limits and user-facing guidance based on backend model requirements.
 - Add authentication, request history, and consent/privacy controls when supporting persistent user accounts.
 - Add automated component, integration, and end-to-end test coverage.
